@@ -8,7 +8,9 @@ datasource db {
 }
 
 model Todo {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   title     String
+  dueDate   DateTime? // Optional due date field
+  imageUrl  String?   // Cached image URL from Pexels
   createdAt DateTime  @default(now())
 }
