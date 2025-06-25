@@ -1,3 +1,5 @@
+-- prisma/migrations/20241209_add_dependencies/migration.sql
+
 -- CreateTable
 CREATE TABLE "TaskDependency" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

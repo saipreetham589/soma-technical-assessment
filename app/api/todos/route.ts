@@ -1,10 +1,25 @@
+// app/api/todos/route.ts
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { pexelsService } from '@/lib/pexels';
+import { DependencyService } from '@/lib/dependencyServices';
 
 export async function GET() {
   try {
     const todos = await prisma.todo.findMany({
+      include: {
+        dependencies: {
+          include: {
+            dependency: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependent: true,
+          },
+        },
+      },
       orderBy: {
         createdAt: 'desc',
       },
@@ -17,7 +32,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { title, dueDate } = await request.json();
+    const { title, dueDate, duration } = await request.json();
     
     if (!title || title.trim() === '') {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -30,6 +45,12 @@ export async function POST(request: Request) {
       if (isNaN(parsedDueDate.getTime())) {
         return NextResponse.json({ error: 'Invalid due date format' }, { status: 400 });
       }
+    }
+
+    // Validate duration
+    const taskDuration = parseInt(duration) || 1;
+    if (taskDuration < 1) {
+      return NextResponse.json({ error: 'Duration must be at least 1 day' }, { status: 400 });
     }
 
     // Fetch relevant image from Pexels based on todo title
@@ -50,6 +71,19 @@ export async function POST(request: Request) {
         title,
         dueDate: parsedDueDate,
         imageUrl,
+        duration: taskDuration,
+      },
+      include: {
+        dependencies: {
+          include: {
+            dependency: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependent: true,
+          },
+        },
       },
     });
     

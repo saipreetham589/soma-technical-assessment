@@ -1,3 +1,5 @@
+// lib/pexels.ts
+
 interface PexelsPhoto {
     id: number;
     url: string;

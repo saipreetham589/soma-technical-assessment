@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,9 +10,30 @@ datasource db {
 }
 
 model Todo {
-  id        Int       @id @default(autoincrement())
-  title     String
-  dueDate   DateTime? // Optional due date field
-  imageUrl  String?   // Cached image URL from Pexels
-  createdAt DateTime  @default(now())
+  id              Int              @id @default(autoincrement())
+  title           String
+  dueDate         DateTime?        // Optional due date field
+  imageUrl        String?          // Cached image URL from Pexels
+  duration        Int              @default(1) // Duration in days
+  earliestStart   DateTime?        // Earliest possible start date
+  latestStart     DateTime?        // Latest start without delaying project
+  earliestFinish  DateTime?        // Earliest possible finish date
+  latestFinish    DateTime?        // Latest finish without delaying project
+  isCritical      Boolean          @default(false) // Part of critical path
+  createdAt       DateTime         @default(now())
+  
+  // Relationships for dependencies
+  dependencies    TaskDependency[] @relation("DependentTask")
+  dependents      TaskDependency[] @relation("DependencyTask")
+}
+
+model TaskDependency {
+  id              Int      @id @default(autoincrement())
+  dependentId     Int      // Task that depends on another
+  dependencyId    Int      // Task that must be completed first
+  
+  dependent       Todo     @relation("DependentTask", fields: [dependentId], references: [id], onDelete: Cascade)
+  dependency      Todo     @relation("DependencyTask", fields: [dependencyId], references: [id], onDelete: Cascade)
+  
+  @@unique([dependentId, dependencyId])
 }
