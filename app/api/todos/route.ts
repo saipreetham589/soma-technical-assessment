@@ -2,22 +2,70 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
+
+const todoSelect = {
+  id: true,
+  title: true,
+  dueDate: true,
+  imageUrl: true,
+  duration: true,
+  earliestStart: true,
+  latestStart: true,
+  earliestFinish: true,
+  latestFinish: true,
+  isCritical: true,
+  createdAt: true,
+  dependencies: {
+    select: {
+      id: true,
+      dependentId: true,
+      dependencyId: true,
+      dependency: {
+        select: {
+          id: true,
+          title: true,
+          dueDate: true,
+          imageUrl: true,
+          duration: true,
+          earliestStart: true,
+          latestStart: true,
+          earliestFinish: true,
+          latestFinish: true,
+          isCritical: true,
+          createdAt: true,
+        },
+      },
+    },
+  },
+  dependents: {
+    select: {
+      id: true,
+      dependentId: true,
+      dependencyId: true,
+      dependent: {
+        select: {
+          id: true,
+          title: true,
+          dueDate: true,
+          imageUrl: true,
+          duration: true,
+          earliestStart: true,
+          latestStart: true,
+          earliestFinish: true,
+          latestFinish: true,
+          isCritical: true,
+          createdAt: true,
+        },
+      },
+    },
+  },
+} as const;
 
 export async function GET() {
   try {
     const todos = await prisma.todo.findMany({
-      include: {
-        dependencies: {
-          include: {
-            dependency: true,
-          },
-        },
-        dependents: {
-          include: {
-            dependent: true,
-          },
-        },
-      },
+      select: todoSelect,
       orderBy: {
         createdAt: 'desc',
       },
@@ -47,45 +95,29 @@ export async function POST(request: Request) {
     }
 
     // Create todo first
+    const createData = {
+      title,
+      dueDate: parsedDueDate,
+      duration: duration || 1,
+    } as unknown as Prisma.TodoCreateInput;
+
     const todo = await prisma.todo.create({
-      data: {
-        title,
-        dueDate: parsedDueDate,
-        duration: duration || 1,
-      },
-      include: {
-        dependencies: {
-          include: {
-            dependency: true,
-          },
-        },
-        dependents: {
-          include: {
-            dependent: true,
-          },
-        },
-      },
+      data: createData,
+      select: todoSelect,
     });
 
     // Generate image URL using picsum
     const imageUrl = `https://picsum.photos/seed/${todo.id}/400/300`;
     
     // Update todo with image URL
+    const updateData = {
+      imageUrl,
+    } as unknown as Prisma.TodoUpdateInput;
+
     const updatedTodo = await prisma.todo.update({
       where: { id: todo.id },
-      data: { imageUrl },
-      include: {
-        dependencies: {
-          include: {
-            dependency: true,
-          },
-        },
-        dependents: {
-          include: {
-            dependent: true,
-          },
-        },
-      },
+      data: updateData,
+      select: todoSelect,
     });
     
     return NextResponse.json(updatedTodo, { status: 201 });

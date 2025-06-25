@@ -1,13 +1,19 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { TodoWithRelations, TaskDependencyWithRelations, Todo, TaskDependency } from '@/lib/types';
+import { TodoWithRelations, Todo } from '@/lib/types';
 
 // Use the properly typed Todo with all relations
 type TodoWithDependencies = TodoWithRelations;
 
 interface DependencyGraph {
   todos: TodoWithDependencies[];
-  dependencies: TaskDependency[];
+  dependencies: Array<{
+    id: number;
+    dependentId: number;
+    dependencyId: number;
+    dependent: Todo;
+    dependency: Todo;
+  }>;
   criticalPath: number[];
 }
 

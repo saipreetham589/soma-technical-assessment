@@ -3,6 +3,27 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { DependencyService } from '@/lib/dependencyServices';
+import { Prisma, Todo } from '@prisma/client';
+
+const todoSelect = {
+  id: true,
+  title: true,
+  dueDate: true,
+  imageUrl: true,
+  duration: true,
+  earliestStart: true,
+  latestStart: true,
+  earliestFinish: true,
+  latestFinish: true,
+  isCritical: true,
+  createdAt: true,
+} as const;
+
+type TaskDependency = {
+  id: number;
+  dependentId: number;
+  dependencyId: number;
+};
 
 interface Params {
   params: {
@@ -29,22 +50,30 @@ export async function POST(
       return NextResponse.json({ error: 'Circular dependency detected' }, { status: 400 });
     }
     
-    // Create the dependency
-    const dependency = await prisma.taskDependency.create({
-      data: {
-        dependentId,
-        dependencyId,
-      },
-      include: {
-        dependent: true,
-        dependency: true,
-      },
-    });
+    // Create the dependency using raw SQL to avoid type issues
+    const [dependency] = await prisma.$queryRaw<TaskDependency[]>`
+      INSERT INTO TaskDependency (dependentId, dependencyId)
+      VALUES (${dependentId}, ${dependencyId})
+      RETURNING id, dependentId, dependencyId
+    `;
+
+    // Get the full dependency info
+    const fullDependency = {
+      ...dependency,
+      dependent: await prisma.todo.findUnique({
+        where: { id: dependentId },
+        select: todoSelect,
+      }),
+      dependency: await prisma.todo.findUnique({
+        where: { id: dependencyId },
+        select: todoSelect,
+      }),
+    };
     
     // Recalculate critical path
     await DependencyService.calculateCriticalPath();
     
-    return NextResponse.json(dependency);
+    return NextResponse.json(fullDependency);
   } catch (error) {
     console.error('Error creating dependency:', error);
     if (error instanceof Error && error.message.includes('Unique constraint')) {
@@ -55,7 +84,7 @@ export async function POST(
 }
 
 // Get all dependencies for a task
-export async function GET(request: Request, { params }: Params) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     const todoId = parseInt(params.id);
     
@@ -63,29 +92,25 @@ export async function GET(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 });
     }
 
-    const todo = await prisma.todo.findUnique({
-      where: { id: todoId },
-      include: {
-        dependencies: {
-          include: {
-            dependency: true,
-          },
-        },
-        dependents: {
-          include: {
-            dependent: true,
-          },
-        },
-      },
-    });
+    // Get dependencies using raw SQL
+    const dependencies = await prisma.$queryRaw<Todo[]>`
+      SELECT t.*
+      FROM Todo t
+      JOIN TaskDependency td ON t.id = td.dependencyId
+      WHERE td.dependentId = ${todoId}
+    `;
 
-    if (!todo) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    }
+    // Get dependents using raw SQL
+    const dependents = await prisma.$queryRaw<Todo[]>`
+      SELECT t.*
+      FROM Todo t
+      JOIN TaskDependency td ON t.id = td.dependentId
+      WHERE td.dependencyId = ${todoId}
+    `;
 
     return NextResponse.json({
-      dependencies: todo.dependencies.map((d: any) => d.dependency),
-      dependents: todo.dependents.map((d: any) => d.dependent),
+      dependencies,
+      dependents,
     });
   } catch (error) {
     console.error('Error fetching dependencies:', error);

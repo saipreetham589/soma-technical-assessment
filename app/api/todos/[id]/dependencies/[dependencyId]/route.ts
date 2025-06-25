@@ -10,14 +10,11 @@ export async function DELETE(
     const dependentId = parseInt(params.id);
     const dependencyId = parseInt(params.dependencyId);
     
-    const deleted = await prisma.taskDependency.delete({
-      where: {
-        dependentId_dependencyId: {
-          dependentId,
-          dependencyId,
-        },
-      },
-    });
+    await prisma.$executeRaw`
+      DELETE FROM TaskDependency
+      WHERE dependentId = ${dependentId}
+      AND dependencyId = ${dependencyId}
+    `;
     
     // Recalculate critical path
     await DependencyService.calculateCriticalPath();

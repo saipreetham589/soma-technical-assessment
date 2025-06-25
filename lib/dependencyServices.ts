@@ -1,10 +1,27 @@
 // lib/dependencyService.ts
 
 import { prisma } from './prisma';
+import { Prisma, Todo } from '@prisma/client';
 import { TodoWithRelations } from './types';
 
 // Use the typed version from our types file
 type TodoWithDependencies = TodoWithRelations;
+type TaskDependency = {
+  id: number;
+  dependentId: number;
+  dependencyId: number;
+};
+
+type TodoWithDuration = Todo & {
+  duration: number;
+  dueDate: Date | null;
+  imageUrl: string | null;
+  earliestStart: Date | null;
+  latestStart: Date | null;
+  earliestFinish: Date | null;
+  latestFinish: Date | null;
+  isCritical: boolean;
+};
 
 export class DependencyService {
   /**
@@ -15,17 +32,17 @@ export class DependencyService {
     fromTaskId: number,
     toTaskId: number
   ): Promise<boolean> {
-    const todos = await prisma.todo.findMany({
-      include: {
-        dependencies: true,
-      },
-    });
+    const todos = await prisma.todo.findMany();
+    const deps = await prisma.$queryRaw<TaskDependency[]>`
+      SELECT id, dependentId, dependencyId 
+      FROM TaskDependency
+    `;
 
     const adjacencyList = new Map<number, number[]>();
-    todos.forEach((todo: any) => {
+    todos.forEach(todo => {
       adjacencyList.set(
         todo.id,
-        todo.dependencies.map((dep: any) => dep.dependencyId)
+        deps.filter(d => d.dependentId === todo.id).map(d => d.dependencyId)
       );
     });
 
@@ -34,7 +51,7 @@ export class DependencyService {
     adjacencyList.set(fromTaskId, [...currentDeps, toTaskId]);
 
     const colors = new Map<number, number>();
-    todos.forEach((todo: any) => colors.set(todo.id, 0));
+    todos.forEach(todo => colors.set(todo.id, 0));
 
     const hasCycle = (nodeId: number): boolean => {
       colors.set(nodeId, 1); // Mark as visiting (Gray)
@@ -74,32 +91,31 @@ export class DependencyService {
     todos: TodoWithDependencies[],
     criticalPath: number[]
   }> {
-    const todos = await prisma.todo.findMany({
-      include: {
-        dependencies: true,
-        dependents: true,
-      },
-    });
+    const todos = await prisma.todo.findMany() as TodoWithDuration[];
+    const deps = await prisma.$queryRaw<TaskDependency[]>`
+      SELECT id, dependentId, dependencyId 
+      FROM TaskDependency
+    `;
 
     // Build adjacency lists for forward and backward passes
     const forwardAdjList = new Map<number, number[]>();
     const backwardAdjList = new Map<number, number[]>();
-    const todoMap = new Map<number, TodoWithDependencies>();
+    const todoMap = new Map<number, TodoWithDuration>();
 
-    todos.forEach((todo: any)    => {
+    todos.forEach(todo => {
       todoMap.set(todo.id, todo);
       forwardAdjList.set(
         todo.id,
-        todo.dependents.map((dep: any) => dep.dependentId)
+        deps.filter(d => d.dependencyId === todo.id).map(d => d.dependentId)
       );
       backwardAdjList.set(
         todo.id,
-        todo.dependencies.map((dep: any) => dep.dependencyId)
+        deps.filter(d => d.dependentId === todo.id).map(d => d.dependencyId)
       );
     });
 
     // Topological sort for processing order
-    const topologicalOrder = this.topologicalSort(todos as any);
+    const topologicalOrder = this.topologicalSort(todos, deps);
 
     // Initialize dates
     const earliestStart = new Map<number, number>();
@@ -176,28 +192,40 @@ export class DependencyService {
       const lsStart = latestStart.get(todo.id) || 0;
       const lfFinish = latestFinish.get(todo.id) || 0;
 
-      updatedTodos.push({
-        ...todo,
+      // Update database
+      const updateData = {
         earliestStart: new Date(today.getTime() + esStart * 24 * 60 * 60 * 1000),
         earliestFinish: new Date(today.getTime() + efFinish * 24 * 60 * 60 * 1000),
         latestStart: new Date(today.getTime() + lsStart * 24 * 60 * 60 * 1000),
         latestFinish: new Date(today.getTime() + lfFinish * 24 * 60 * 60 * 1000),
-        isCritical,
-      } as any);
-    }
+        isCritical
+      } as const;
 
-    // Update database with calculated values
-    for (const todo of updatedTodos) {
       await prisma.todo.update({
         where: { id: todo.id },
-        data: {
-          earliestStart: (todo as any).earliestStart,
-          earliestFinish: (todo as any).earliestFinish,
-          latestStart: (todo as any).latestStart,
-          latestFinish: (todo as any).latestFinish,
-          isCritical: (todo as any).isCritical,
-        },
+        data: updateData
       });
+
+      // Add to result
+      const dependencies = deps
+        .filter(d => d.dependentId === todo.id)
+        .map(d => ({
+          ...d,
+          dependency: todoMap.get(d.dependencyId)!
+        }));
+
+      const dependents = deps
+        .filter(d => d.dependencyId === todo.id)
+        .map(d => ({
+          ...d,
+          dependent: todoMap.get(d.dependentId)!
+        }));
+
+      updatedTodos.push({
+        ...todo,
+        dependencies,
+        dependents
+      } as TodoWithDependencies);
     }
 
     return { todos: updatedTodos, criticalPath };
@@ -206,7 +234,7 @@ export class DependencyService {
   /**
    * Topological sort using DFS
    */
-  private static topologicalSort(todos: TodoWithDependencies[]): number[] {
+  private static topologicalSort(todos: TodoWithDuration[], deps: TaskDependency[]): number[] {
     const visited = new Set<number>();
     const stack: number[] = [];
     const adjacencyList = new Map<number, number[]>();
@@ -214,7 +242,7 @@ export class DependencyService {
     todos.forEach(todo => {
       adjacencyList.set(
         todo.id,
-        todo.dependencies.map((dep: any) => dep.dependencyId)
+        deps.filter(d => d.dependentId === todo.id).map(d => d.dependencyId)
       );
     });
 
@@ -244,21 +272,30 @@ export class DependencyService {
    * Get the dependency graph structure for visualization
    */
   static async getDependencyGraph() {
-    const todos = await prisma.todo.findMany({
-      include: {
-        dependencies: true,
-        dependents: true,
-      },
-    });
+    const todos = await prisma.todo.findMany() as TodoWithDuration[];
+    const deps = await prisma.$queryRaw<TaskDependency[]>`
+      SELECT id, dependentId, dependencyId 
+      FROM TaskDependency
+    `;
+    const todoMap = new Map(todos.map(t => [t.id, t]));
 
-    const dependencies = await prisma.taskDependency.findMany({
-      include: {
-        dependent: true,
-        dependency: true,
-      },
-    });
+    const todosWithDeps = todos.map(todo => ({
+      ...todo,
+      dependencies: deps
+        .filter(d => d.dependentId === todo.id)
+        .map(d => ({
+          ...d,
+          dependency: todoMap.get(d.dependencyId)!
+        })),
+      dependents: deps
+        .filter(d => d.dependencyId === todo.id)
+        .map(d => ({
+          ...d,
+          dependent: todoMap.get(d.dependentId)!
+        }))
+    }));
 
-    return { todos, dependencies };
+    return { todos: todosWithDeps, dependencies: deps };
   }
 }
 
