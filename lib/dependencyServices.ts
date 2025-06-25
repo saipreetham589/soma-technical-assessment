@@ -1,12 +1,10 @@
 // lib/dependencyService.ts
 
-import { Todo, TaskDependency } from '@prisma/client';
 import { prisma } from './prisma';
+import { TodoWithRelations } from './types';
 
-interface TodoWithDependencies extends Todo {
-  dependencies: TaskDependency[];
-  dependents: TaskDependency[];
-}
+// Use the typed version from our types file
+type TodoWithDependencies = TodoWithRelations;
 
 export class DependencyService {
   /**
@@ -24,10 +22,10 @@ export class DependencyService {
     });
 
     const adjacencyList = new Map<number, number[]>();
-    todos.forEach(todo => {
+    todos.forEach((todo: any) => {
       adjacencyList.set(
         todo.id,
-        todo.dependencies.map(dep => dep.dependencyId)
+        todo.dependencies.map((dep: any) => dep.dependencyId)
       );
     });
 
@@ -36,7 +34,7 @@ export class DependencyService {
     adjacencyList.set(fromTaskId, [...currentDeps, toTaskId]);
 
     const colors = new Map<number, number>();
-    todos.forEach(todo => colors.set(todo.id, 0));
+    todos.forEach((todo: any) => colors.set(todo.id, 0));
 
     const hasCycle = (nodeId: number): boolean => {
       colors.set(nodeId, 1); // Mark as visiting (Gray)
@@ -59,7 +57,8 @@ export class DependencyService {
     };
 
     // Check for cycles starting from any unvisited node
-    for (const [nodeId, color] of colors) {
+    const entries = Array.from(colors.entries());
+    for (const [nodeId, color] of entries) {
       if (color === 0 && hasCycle(nodeId)) {
         return true;
       }
@@ -87,20 +86,20 @@ export class DependencyService {
     const backwardAdjList = new Map<number, number[]>();
     const todoMap = new Map<number, TodoWithDependencies>();
 
-    todos.forEach(todo => {
+    todos.forEach((todo: any)    => {
       todoMap.set(todo.id, todo);
       forwardAdjList.set(
         todo.id,
-        todo.dependents.map(dep => dep.dependentId)
+        todo.dependents.map((dep: any) => dep.dependentId)
       );
       backwardAdjList.set(
         todo.id,
-        todo.dependencies.map(dep => dep.dependencyId)
+        todo.dependencies.map((dep: any) => dep.dependencyId)
       );
     });
 
     // Topological sort for processing order
-    const topologicalOrder = this.topologicalSort(todos);
+    const topologicalOrder = this.topologicalSort(todos as any);
 
     // Initialize dates
     const earliestStart = new Map<number, number>();
@@ -184,7 +183,7 @@ export class DependencyService {
         latestStart: new Date(today.getTime() + lsStart * 24 * 60 * 60 * 1000),
         latestFinish: new Date(today.getTime() + lfFinish * 24 * 60 * 60 * 1000),
         isCritical,
-      });
+      } as any);
     }
 
     // Update database with calculated values
@@ -192,11 +191,11 @@ export class DependencyService {
       await prisma.todo.update({
         where: { id: todo.id },
         data: {
-          earliestStart: todo.earliestStart,
-          earliestFinish: todo.earliestFinish,
-          latestStart: todo.latestStart,
-          latestFinish: todo.latestFinish,
-          isCritical: todo.isCritical,
+          earliestStart: (todo as any).earliestStart,
+          earliestFinish: (todo as any).earliestFinish,
+          latestStart: (todo as any).latestStart,
+          latestFinish: (todo as any).latestFinish,
+          isCritical: (todo as any).isCritical,
         },
       });
     }
@@ -215,7 +214,7 @@ export class DependencyService {
     todos.forEach(todo => {
       adjacencyList.set(
         todo.id,
-        todo.dependencies.map(dep => dep.dependencyId)
+        todo.dependencies.map((dep: any) => dep.dependencyId)
       );
     });
 

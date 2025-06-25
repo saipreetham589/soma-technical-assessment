@@ -11,61 +11,26 @@ interface Params {
 }
 
 // Add a dependency
-export async function POST(request: Request, { params }: Params) {
+export async function POST(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const dependentId = parseInt(params.id);
     const { dependencyId } = await request.json();
-
-    if (isNaN(dependentId) || isNaN(dependencyId)) {
-      return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 });
+    
+    if (!dependencyId) {
+      return NextResponse.json({ error: 'Dependency ID is required' }, { status: 400 });
     }
-
-    if (dependentId === dependencyId) {
-      return NextResponse.json({ error: 'A task cannot depend on itself' }, { status: 400 });
-    }
-
-    // Check if both tasks exist
-    const [dependent, dependency] = await Promise.all([
-      prisma.todo.findUnique({ where: { id: dependentId } }),
-      prisma.todo.findUnique({ where: { id: dependencyId } }),
-    ]);
-
-    if (!dependent || !dependency) {
-      return NextResponse.json({ error: 'One or both tasks not found' }, { status: 404 });
-    }
-
+    
     // Check for circular dependency
-    const hasCircularDep = await DependencyService.detectCircularDependency(
-      dependentId,
-      dependencyId
-    );
-
-    if (hasCircularDep) {
-      return NextResponse.json(
-        { error: 'This dependency would create a circular reference' },
-        { status: 400 }
-      );
+    const hasCircular = await DependencyService.detectCircularDependency(dependentId, dependencyId);
+    if (hasCircular) {
+      return NextResponse.json({ error: 'Circular dependency detected' }, { status: 400 });
     }
-
-    // Check if dependency already exists
-    const existingDep = await prisma.taskDependency.findUnique({
-      where: {
-        dependentId_dependencyId: {
-          dependentId,
-          dependencyId,
-        },
-      },
-    });
-
-    if (existingDep) {
-      return NextResponse.json(
-        { error: 'This dependency already exists' },
-        { status: 400 }
-      );
-    }
-
+    
     // Create the dependency
-    const taskDependency = await prisma.taskDependency.create({
+    const dependency = await prisma.taskDependency.create({
       data: {
         dependentId,
         dependencyId,
@@ -75,17 +40,17 @@ export async function POST(request: Request, { params }: Params) {
         dependency: true,
       },
     });
-
+    
     // Recalculate critical path
     await DependencyService.calculateCriticalPath();
-
-    return NextResponse.json(taskDependency, { status: 201 });
+    
+    return NextResponse.json(dependency);
   } catch (error) {
     console.error('Error creating dependency:', error);
-    return NextResponse.json(
-      { error: 'Error creating dependency' },
-      { status: 500 }
-    );
+    if (error instanceof Error && error.message.includes('Unique constraint')) {
+      return NextResponse.json({ error: 'Dependency already exists' }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'Error creating dependency' }, { status: 500 });
   }
 }
 
@@ -119,8 +84,8 @@ export async function GET(request: Request, { params }: Params) {
     }
 
     return NextResponse.json({
-      dependencies: todo.dependencies.map(d => d.dependency),
-      dependents: todo.dependents.map(d => d.dependent),
+      dependencies: todo.dependencies.map((d: any) => d.dependency),
+      dependents: todo.dependents.map((d: any) => d.dependent),
     });
   } catch (error) {
     console.error('Error fetching dependencies:', error);

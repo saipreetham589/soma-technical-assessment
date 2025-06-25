@@ -1,24 +1,9 @@
 "use client"
-import { Todo, TaskDependency } from '@prisma/client';
 import { useState, useEffect } from 'react';
+import { TodoWithRelations, TaskDependencyWithRelations, Todo, TaskDependency } from '@/lib/types';
 
-// Extended Todo type with dependencies
-interface TodoWithDependencies extends Todo {
-  dueDate?: string | null;
-  imageUrl?: string | null;
-  dependencies: Array<{
-    id: number;
-    dependentId: number;
-    dependencyId: number;
-    dependency: Todo;
-  }>;
-  dependents: Array<{
-    id: number;
-    dependentId: number;
-    dependencyId: number;
-    dependent: Todo;
-  }>;
-}
+// Use the properly typed Todo with all relations
+type TodoWithDependencies = TodoWithRelations;
 
 interface DependencyGraph {
   todos: TodoWithDependencies[];
@@ -36,6 +21,7 @@ export default function Home() {
   const [graph, setGraph] = useState<DependencyGraph | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<number | null>(null);
   const [selectedDependency, setSelectedDependency] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTodos();
@@ -45,16 +31,24 @@ export default function Home() {
   const fetchTodos = async () => {
     try {
       const res = await fetch('/api/todos');
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
       setTodos(data);
+      setError(null);
     } catch (error) {
       console.error('Failed to fetch todos:', error);
+      setError('Failed to load todos. Please check your setup.');
     }
   };
 
   const fetchGraph = async () => {
     try {
       const res = await fetch('/api/todos/graph');
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
       const data = await res.json();
       setGraph(data);
     } catch (error) {
@@ -66,6 +60,7 @@ export default function Home() {
     if (!newTodo.trim()) return;
     
     setIsCreating(true);
+    setError(null);
     
     try {
       const payload: { title: string; dueDate?: string; duration?: number } = { 
@@ -77,11 +72,16 @@ export default function Home() {
         payload.dueDate = newDueDate;
       }
 
-      await fetch('/api/todos', {
+      const res = await fetch('/api/todos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to create todo');
+      }
       
       setNewTodo('');
       setNewDueDate('');
@@ -90,20 +90,27 @@ export default function Home() {
       fetchGraph();
     } catch (error) {
       console.error('Failed to add todo:', error);
+      setError(error instanceof Error ? error.message : 'Failed to add todo');
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleDeleteTodo = async (id: any) => {
+  const handleDeleteTodo = async (id: number) => {
     try {
-      await fetch(`/api/todos/${id}`, {
+      const res = await fetch(`/api/todos/${id}`, {
         method: 'DELETE',
       });
+      
+      if (!res.ok) {
+        throw new Error('Failed to delete todo');
+      }
+      
       fetchTodos();
       fetchGraph();
     } catch (error) {
       console.error('Failed to delete todo:', error);
+      setError('Failed to delete todo');
     }
   };
 
@@ -135,17 +142,23 @@ export default function Home() {
 
   const handleRemoveDependency = async (dependentId: number, dependencyId: number) => {
     try {
-      await fetch(`/api/todos/${dependentId}/dependencies/${dependencyId}`, {
+      const res = await fetch(`/api/todos/${dependentId}/dependencies/${dependencyId}`, {
         method: 'DELETE',
       });
+      
+      if (!res.ok) {
+        throw new Error('Failed to remove dependency');
+      }
+      
       fetchTodos();
       fetchGraph();
     } catch (error) {
       console.error('Failed to remove dependency:', error);
+      setError('Failed to remove dependency');
     }
   };
 
-  const isOverdue = (dueDate: string | null | undefined): boolean => {
+  const isOverdue = (dueDate: string | Date | null | undefined): boolean => {
     if (!dueDate) return false;
     const today = new Date();
     const due = new Date(dueDate);
@@ -154,7 +167,7 @@ export default function Home() {
     return due < today;
   };
 
-  const formatDate = (date: string | null | undefined): string => {
+  const formatDate = (date: string | Date | null | undefined): string => {
     if (!date) return '';
     const d = new Date(date);
     return d.toLocaleDateString('en-US', { 
@@ -217,6 +230,19 @@ export default function Home() {
       <div className="w-full max-w-4xl">
         <h1 className="text-4xl font-bold text-center text-white mb-8">Things To Do App</h1>
         
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-500 text-white p-4 rounded-xl mb-6">
+            <p>{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="mt-2 bg-white text-red-500 px-3 py-1 rounded text-sm"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        
         {/* Todo Input Form */}
         <div className="bg-white bg-opacity-20 backdrop-blur-lg rounded-2xl p-6 mb-6 shadow-xl">
           <input
@@ -266,7 +292,7 @@ export default function Home() {
         </div>
 
         {/* Controls */}
-        <div className="flex gap-4 mb-6">
+        <div className="flex gap-4 mb-6 flex-wrap">
           <button
             onClick={() => setShowGraph(!showGraph)}
             className="bg-white bg-opacity-20 backdrop-blur-lg text-white px-4 py-2 rounded-xl hover:bg-opacity-30 transition duration-300 font-semibold"
@@ -275,7 +301,7 @@ export default function Home() {
           </button>
           
           {todos.length > 1 && (
-            <div className="flex gap-2 items-center bg-white bg-opacity-20 backdrop-blur-lg rounded-xl p-2">
+            <div className="flex gap-2 items-center bg-white bg-opacity-20 backdrop-blur-lg rounded-xl p-2 flex-wrap">
               <select
                 value={selectedTodo || ''}
                 onChange={(e) => setSelectedTodo(Number(e.target.value))}
@@ -362,8 +388,8 @@ export default function Home() {
                     
                     {todo.earliestStart && (
                       <div className="text-xs">
-                        Can start: {formatDate(todo.earliestStart.toString())} | 
-                        Must finish by: {formatDate(todo.latestFinish?.toString())}
+                        Can start: {formatDate(todo.earliestStart)} | 
+                        Must finish by: {formatDate(todo.latestFinish)}
                       </div>
                     )}
                   </div>
@@ -373,7 +399,7 @@ export default function Home() {
                     <div className="mt-2">
                       <span className="text-xs text-gray-500">Depends on:</span>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {todo.dependencies.map(dep => (
+                        {todo.dependencies.map((dep: any) => (
                           <span
                             key={dep.id}
                             className="text-xs bg-gray-200 px-2 py-1 rounded flex items-center gap-1"
@@ -416,7 +442,7 @@ export default function Home() {
           ))}
         </ul>
 
-        {todos.length === 0 && (
+        {todos.length === 0 && !error && (
           <div className="text-center text-white opacity-75 mt-8">
             <p className="text-lg">No todos yet!</p>
             <p className="text-sm">Add your first task above 📝</p>
@@ -443,19 +469,30 @@ function DependencyGraphVisualization({ graph }: { graph: DependencyGraph }) {
     return { x, y };
   };
   
+  if (todos.length === 0) {
+    return (
+      <div className="text-gray-500 text-center py-8">
+        No tasks available for graph visualization
+      </div>
+    );
+  }
+  
   return (
     <div className="relative w-full h-96 overflow-auto border rounded-lg bg-gray-50">
       <svg width="800" height="600" className="w-full h-full">
         {/* Draw dependencies as lines */}
-        {dependencies.map(dep => {
+        {dependencies.map((dep, idx) => {
           const fromIndex = todos.findIndex(t => t.id === dep.dependencyId);
           const toIndex = todos.findIndex(t => t.id === dep.dependentId);
+          
+          if (fromIndex === -1 || toIndex === -1) return null;
+          
           const from = getNodePosition(dep.dependencyId, fromIndex);
           const to = getNodePosition(dep.dependentId, toIndex);
           const isCritical = criticalPath.includes(dep.dependencyId) && criticalPath.includes(dep.dependentId);
           
           return (
-            <g key={`${dep.dependencyId}-${dep.dependentId}`}>
+            <g key={`${dep.dependencyId}-${dep.dependentId}-${idx}`}>
               <line
                 x1={from.x + 60}
                 y1={from.y}

@@ -1,4 +1,19 @@
 -- CreateTable
+CREATE TABLE "Todo" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "title" TEXT NOT NULL,
+    "dueDate" DATETIME,
+    "imageUrl" TEXT,
+    "duration" INTEGER NOT NULL DEFAULT 1,
+    "earliestStart" DATETIME,
+    "latestStart" DATETIME,
+    "earliestFinish" DATETIME,
+    "latestFinish" DATETIME,
+    "isCritical" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CreateTable
 CREATE TABLE "TaskDependency" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "dependentId" INTEGER NOT NULL,
@@ -9,11 +24,3 @@ CREATE TABLE "TaskDependency" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "TaskDependency_dependentId_dependencyId_key" ON "TaskDependency"("dependentId", "dependencyId");
-
--- AlterTable
-ALTER TABLE "Todo" ADD COLUMN "duration" INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE "Todo" ADD COLUMN "earliestStart" DATETIME;
-ALTER TABLE "Todo" ADD COLUMN "latestStart" DATETIME;
-ALTER TABLE "Todo" ADD COLUMN "earliestFinish" DATETIME;
-ALTER TABLE "Todo" ADD COLUMN "latestFinish" DATETIME;
-ALTER TABLE "Todo" ADD COLUMN "isCritical" BOOLEAN NOT NULL DEFAULT false;
