@@ -225,4 +225,15 @@ While the current implementation meets all requirements, potential improvements 
 2. ✅ Ready to push changes to public GitHub repository
 3. ✅ Solution demonstrates enterprise-level implementation
 
+## Solution Screenshots
+
+### Main Interface
+![Main Todo Interface](./screenshots/main.png)
+
+### Dependency Graph Visualization  
+![Dependency Graph](./screenshots/dependency.png)
+
+### Task Creation with Due Dates
+![Task Creation](./screenshots/theme.png)
+
 Thanks for your time and effort. We'll be in touch soon!
