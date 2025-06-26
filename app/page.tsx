@@ -193,38 +193,47 @@ export default function Home() {
   const TodoImage = ({ imageUrl, title }: { imageUrl?: string | null; title: string }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
-
+  
+    const handleLoad = () => {
+      setIsLoading(false);
+    };
+  
+    const handleError = () => {
+      setIsLoading(false);
+      setHasError(true);
+    };
+  
     if (!imageUrl) {
       return (
         <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
-          <span className="text-gray-400 text-xs">📝</span>
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
         </div>
       );
     }
 
     return (
-      <div className="w-16 h-16 relative rounded-lg overflow-hidden bg-gray-200">
+      <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-orange-500 border-t-transparent"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
           </div>
         )}
+        
         {hasError ? (
-          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-            📝
+          <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+            <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
           </div>
         ) : (
           <img
             src={imageUrl}
-            alt={`Visual for ${title}`}
+            alt={`Visual representation of ${title}`}
             className={`w-full h-full object-cover transition-opacity duration-300 ${
               isLoading ? 'opacity-0' : 'opacity-100'
             }`}
-            onLoad={() => setIsLoading(false)}
-            onError={() => {
-              setHasError(true);
-              setIsLoading(false);
-            }}
+            onLoad={handleLoad}
+            onError={handleError}
           />
         )}
       </div>
@@ -554,14 +563,6 @@ function DependencyGraphVisualization({ graph }: { graph: DependencyGraph }) {
               >
                 {todo.title.substring(0, 15)}
                 {todo.title.length > 15 ? '...' : ''}
-              </text>
-              <text
-                textAnchor="middle"
-                y="15"
-                fill="white"
-                fontSize="10"
-              >
-                {todo.duration}d
               </text>
             </g>
           );

@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { pexelsService } from '@/lib/pexels';
 import { Prisma } from '@prisma/client';
 
 const todoSelect = {
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create todo first
+    // Create todo first (without image)
     const createData = {
       title,
       dueDate: parsedDueDate,
@@ -106,8 +107,25 @@ export async function POST(request: Request) {
       select: todoSelect,
     });
 
-    // Generate image URL using picsum
-    const imageUrl = `https://picsum.photos/seed/${todo.id}/400/300`;
+    // Fetch image from Pexels API
+    let imageUrl: string | null = null;
+    try {
+      imageUrl = await pexelsService.searchPhotos(title);
+      
+      // If Pexels fails, try fallback image
+      if (!imageUrl) {
+        imageUrl = await pexelsService.getFallbackImage();
+      }
+      
+      // If both fail, use a semantic fallback based on todo ID
+      if (!imageUrl) {
+        imageUrl = `https://picsum.photos/seed/${todo.id}/400/300`;
+      }
+    } catch (error) {
+      console.error('Error fetching image from Pexels:', error);
+      // Use fallback image if Pexels fails
+      imageUrl = `https://picsum.photos/seed/${todo.id}/400/300`;
+    }
     
     // Update todo with image URL
     const updateData = {
